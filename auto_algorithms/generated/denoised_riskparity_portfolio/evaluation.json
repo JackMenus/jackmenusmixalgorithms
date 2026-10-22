@@ -1,0 +1,64 @@
+{
+  "algo_id": "denoised_riskparity_portfolio",
+  "protocol": "PortfolioConstructor",
+  "metrics": {
+    "sharpe": 4.035865833123011,
+    "ann_return": 0.21121918387531205,
+    "ann_vol": 0.05279536586913125,
+    "max_drawdown": -0.017291668845263824,
+    "avg_turnover": 1.5828424933303935,
+    "avg_hhi": 0.04080337227601765,
+    "max_weight": 0.08000000017964763,
+    "n_rebalances": 89.0,
+    "sharpe_per_panel": [
+      4.1345,
+      2.8209,
+      5.1522
+    ],
+    "n_panels": 3.0,
+    "wins_vs_baseline": 0.6666666666666666
+  },
+  "baselines": {
+    "reference.LongShortConstructor": {
+      "sharpe": 3.93984443519169,
+      "ann_return": 0.23435484974442286,
+      "ann_vol": 0.05999125182369225,
+      "max_drawdown": -0.01833045871927434,
+      "avg_turnover": 1.5853038969843396,
+      "avg_hhi": 0.03827218361974439,
+      "max_weight": 0.08,
+      "n_rebalances": 89.0,
+      "sharpe_per_panel": [
+        4.0099,
+        2.8842,
+        4.9254
+      ]
+    }
+  },
+  "settings": {
+    "train_ratio": 0.7,
+    "n_rebalances_per_panel": 89,
+    "n_panels": 3,
+    "rebalance_every": 2,
+    "cost_bps": 5.0,
+    "alpha": "ControlledICAlpha",
+    "alpha_params": {
+      "model_id": "bench_controlled_ic",
+      "ic": 0.08,
+      "horizon": 5,
+      "seed": 0
+    },
+    "budget": "standard",
+    "seed": 0
+  },
+  "objective": "sharpe",
+  "higher_is_better": true,
+  "passed": true,
+  "verdict": "样本外夏普（3 个面板平均）4.04 vs 基线 3.94（逐面板胜率 67%）；年化波动 5.28% vs 6.00%；集中度 HHI 0.041 vs 0.038；换手 1.58 vs 1.59。",
+  "notes": [
+    "通过条件：夏普 > 0 且 ≥ 基线 − 10%·|基线|；两者使用同一 alpha（ControlledICAlpha）与成本假设（5.0 bps 单边），每 2 日再平衡。",
+    "信号为受控 IC=0.08 的合成信号（含未来信息，只用于把组合构造质量与 alpha 质量分离），不代表可交易收益。"
+  ],
+  "wall_s": 5.1659722328186035,
+  "created_at": "2026-10-22T11:38:10+00:00"
+}

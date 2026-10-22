@@ -1,0 +1,99 @@
+{
+  "config": {
+    "families": null,
+    "protocols": null,
+    "n_candidates": 8,
+    "budget": "standard",
+    "seed": 0,
+    "proposer": "evolution",
+    "model": "claude-fable-5-1",
+    "effort": "max",
+    "out_dir": null,
+    "train_ratio": 0.7,
+    "algo_ids": {},
+    "emit_failed": true,
+    "rounds": 4
+  },
+  "started": "2026-10-22T11:35:35",
+  "finished": "2026-10-22T12:03:18",
+  "wall_s": 1662.1,
+  "results": [
+    {
+      "algo_id": "regime_gated_alpha",
+      "family": "alpha.regime_gated",
+      "protocol": "AlphaModel",
+      "objective": "rank_ic",
+      "value": 0.023381106794097058,
+      "baseline": 0.03408426611364733,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 34.0
+    },
+    {
+      "algo_id": "signature_alpha",
+      "family": "alpha.signature",
+      "protocol": "AlphaModel",
+      "objective": "rank_ic",
+      "value": 0.021901490327077198,
+      "baseline": 0.03408426611364733,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 29.2
+    },
+    {
+      "algo_id": "cross_operator_mined_alpha",
+      "family": "alpha.cross_operator_mined",
+      "protocol": "AlphaModel",
+      "objective": "rank_ic",
+      "value": 0.022173136237409213,
+      "baseline": 0.03408426611364733,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 77.7
+    },
+    {
+      "algo_id": "denoised_riskparity_portfolio",
+      "family": "portfolio.denoised_riskparity",
+      "protocol": "PortfolioConstructor",
+      "objective": "sharpe",
+      "value": 4.035865833123011,
+      "baseline": 3.93984443519169,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 47.8
+    },
+    {
+      "algo_id": "kalman_pid_execution",
+      "family": "execution.kalman_pid",
+      "protocol": "ExecutionStrategy",
+      "objective": "shortfall_bps",
+      "value": -1.6248661272888696,
+      "baseline": 3.2135707614172704,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 32.6
+    },
+    {
+      "algo_id": "bandit_strategy_selector",
+      "family": "selector.bandit",
+      "protocol": "StrategySelector",
+      "objective": "learned_rounds_shortfall_bps",
+      "value": -1.6033286387195098,
+      "baseline": 0.539540598459011,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 169.1
+    },
+    {
+      "algo_id": "bayesian_venue_router",
+      "family": "router.bayesian_venue",
+      "protocol": "Router",
+      "objective": "shortfall_bps",
+      "value": 1.858486028167909,
+      "baseline": 9.437645160985165,
+      "passed": true,
+      "n_candidates": 9,
+      "wall_s": 1271.7
+    }
+  ]
+}
