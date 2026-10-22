@@ -6,6 +6,8 @@
 - ``order_placement``  挂单策略库            → ExecutionStrategyFactory / ImpactModel
 - ``latency_routing``  路由延迟优化库        → Router（经 ``adapters.latency_routing_adapter`` 适配）
 - ``crossquant``       物理/数学/控制跨学科库 → StateEstimator / Controller / ImpactModel（结构化子类型，直接登记）
+- ``autoalgo``         自主生成算法库（auto_algorithms/）→ 任意协议的生成算法，kind 形如 ``autoalgo.<algo_id>`` /
+                       ``autoalgo.family.<family>``；``autoalgo.auto`` 取该协议下第一个评估通过的生成算法
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ SIBLING_LIBS: Dict[str, str] = {
     "order_placement": os.path.join(PROJECT_ROOT, "quant", "order_placement"),
     "latency_routing": os.path.join(PROJECT_ROOT, "routing_latency"),
     "crossquant": os.path.join(PROJECT_ROOT, "physics_math_control"),
+    "autoalgo": os.path.join(PROJECT_ROOT, "auto_algorithms"),
 }
 
 # crossquant 各协议在 kind="auto" / "crossquant" 时的默认实现
@@ -70,8 +73,26 @@ def _available(name: str) -> bool:
     return bool(discover([name]).get(name))
 
 
+def _is_autoalgo(kind: str) -> bool:
+    return isinstance(kind, str) and (kind == "autoalgo" or kind.startswith("autoalgo."))
+
+
+def _autoalgo():
+    if not _available("autoalgo"):
+        raise ImportError(f"autoalgo 不可用（路径 {SIBLING_LIBS['autoalgo']}）")
+    from autoalgo import registry as _r
+
+    return _r
+
+
+def _autoalgo_kind(kind: str) -> str:
+    return "auto" if kind == "autoalgo" else kind
+
+
 # ----------------------------------------------------------------------------- 因子挖掘库
 def make_alpha_model(kind: str = "auto", **cfg):
+    if _is_autoalgo(kind):
+        return _autoalgo().make_alpha_model(_autoalgo_kind(kind), **cfg)
     if kind in ("auto", "factormine") and _available("factormine"):
         import factormine as fm
 
@@ -93,6 +114,8 @@ def make_factor_miner(kind: str = "auto", **cfg):
 
 # ----------------------------------------------------------------------------- 挂单策略库
 def make_execution_factory(kind: str = "auto", **cfg):
+    if _is_autoalgo(kind):  # 组合式工厂：自研策略 + 挂单库全部策略
+        return _autoalgo().make_execution_factory(_autoalgo_kind(kind), **cfg)
     if kind in ("auto", "order_placement") and _available("order_placement"):
         import order_placement as op
 
@@ -106,6 +129,8 @@ def make_execution_factory(kind: str = "auto", **cfg):
 
 # ----------------------------------------------------------------------------- 路由延迟优化库
 def make_router(kind: str = "auto", venues: Sequence[str] = (), **cfg):
+    if _is_autoalgo(kind):  # 叠加层：底层默认为 latency_routing 适配器（不可用时为参考路由）
+        return _autoalgo().make_router(_autoalgo_kind(kind), venues=list(venues), base=cfg.pop("base", None) or make_router("auto", venues), **cfg)
     if kind in ("auto", "latency_routing") and _available("latency_routing"):
         from ..adapters.latency_routing_adapter import LatencyRoutingAdapter
 
@@ -192,9 +217,24 @@ def make_controller(kind: str = "auto", **cfg):
 
 # ----------------------------------------------------------------------------- 集成层自带
 def make_portfolio(kind: str = "reference", **cfg):
+    if _is_autoalgo(kind):
+        return _autoalgo().make_portfolio(_autoalgo_kind(kind), **cfg)
     from ..reference.portfolio import LongShortConstructor
 
     return LongShortConstructor(**cfg)
+
+
+def make_strategy_selector(kind: str = "reference", **cfg):
+    """执行策略选择器：``reference``（规则 choose_strategy）或 ``autoalgo.<algo_id>`` / ``autoalgo.auto``（上下文老虎机等生成算法）。
+
+    返回的对象是 ``(order, snapshot, available) -> (name, params)`` 的可调用对象；若有 ``attach(pipeline)`` 方法，
+    ``build_sim_pipeline`` 会调用它以订阅 ``order_done`` 回填奖励。
+    """
+    if _is_autoalgo(kind):
+        return _autoalgo().make_strategy_selector(_autoalgo_kind(kind), **cfg)
+    from ..reference.execution import choose_strategy
+
+    return choose_strategy
 
 
 def plugin_registry() -> Dict[str, Dict[str, str]]:
@@ -220,6 +260,10 @@ def plugin_registry() -> Dict[str, Dict[str, str]]:
         reg["Router"]["latency_routing.make_router"] = SIBLING_LIBS["latency_routing"]
     for proto, impls in crossquant_entries().items():
         reg.setdefault(proto, {}).update({name: SIBLING_LIBS["crossquant"] for name in impls})
+    if st.get("autoalgo"):
+        for proto, impls in _autoalgo().registry_entries().items():
+            key = "ExecutionStrategyFactory" if proto == "ExecutionStrategy" else proto  # 生成的执行策略以组合式工厂的形式接入
+            reg.setdefault(key, {}).update({name: SIBLING_LIBS["autoalgo"] for name in impls})
     return {k: v for k, v in reg.items() if v}
 
 
@@ -238,12 +282,18 @@ def build_sim_pipeline(
     exec_cfg: Optional[dict] = None,
     router_cfg: Optional[dict] = None,
     start_us: int = 0,
+    selector_cfg: Optional[dict] = None,
 ) -> TradingPipeline:
-    """用合成日内市场 + 撮合模拟器搭一条完整流水线（演示 / 测试 / agent 训练场）。"""
+    """用合成日内市场 + 撮合模拟器搭一条完整流水线（演示 / 测试 / agent 训练场）。
+
+    ``kinds`` 可含 ``alpha / execution / router / portfolio / selector``；``portfolio`` 默认 ``reference``，``selector`` 默认 ``reference``
+    （规则选择器）。自主生成算法库的实现用 ``autoalgo.<algo_id>``（或 ``autoalgo.auto``）指定，例如
+    ``kinds={"alpha": "autoalgo.regime_gated_alpha", "execution": "autoalgo.kalman_pid_execution", "selector": "autoalgo.bandit_strategy_selector"}``。
+    """
     from ..sim.market import DEFAULT_VENUES, SyntheticMarket, panel_stats
     from ..sim.venue import VenueSimulator
 
-    kinds = {"alpha": "auto", "execution": "auto", "router": "auto", **(kinds or {})}
+    kinds = {"alpha": "auto", "execution": "auto", "router": "auto", "portfolio": "reference", "selector": "reference", **(kinds or {})}
     venues = list(venues or DEFAULT_VENUES)
     st = panel_stats(panel, as_of)
     market = SyntheticMarket(st["price"], st["volatility"], st["adv"], venues=venues, start_us=start_us, seed=seed)
@@ -252,8 +302,9 @@ def build_sim_pipeline(
     alpha = make_alpha_model(kinds["alpha"], **(alpha_cfg or {}))
     exec_factory = make_execution_factory(kinds["execution"], **(exec_cfg or {}))
     router = make_router(kinds["router"], [v.name for v in venues], **(router_cfg or {}))
-    portfolio = make_portfolio(**(portfolio_cfg or {}))
-    return TradingPipeline(
+    portfolio = make_portfolio(kinds["portfolio"], **(portfolio_cfg or {}))
+    selector = make_strategy_selector(kinds["selector"], **(selector_cfg or {}))
+    pipe = TradingPipeline(
         alpha_model=alpha,
         portfolio=portfolio,
         execution_factory=exec_factory,
@@ -265,4 +316,10 @@ def build_sim_pipeline(
         risk_gate=PreTradeRiskGate(limits or RiskLimits()),
         tca=TCAEngine(),
         config=config or PipelineConfig(),
+        strategy_selector=selector,
     )
+    if hasattr(selector, "attach"):
+        selector.attach(pipe)
+    if hasattr(portfolio, "fit") and kinds["portfolio"] != "reference":
+        portfolio.fit(panel, as_of)
+    return pipe

@@ -1,0 +1,54 @@
+{
+  "algo_id": "bandit_strategy_selector",
+  "protocol": "StrategySelector",
+  "metrics": {
+    "shortfall_bps": 3.2611436646535332,
+    "shortfall_median_bps": 3.0827022828577326,
+    "shortfall_std_bps": 21.02712205814052,
+    "fill_ratio": 1.0,
+    "maker_ratio": 0.779140880988453,
+    "n_orders": 60.0,
+    "learned_rounds_shortfall_bps": -1.6033286387195098,
+    "n_seeds": 2.0
+  },
+  "baselines": {
+    "reference.choose_strategy": {
+      "shortfall_bps": 8.631442422415533,
+      "shortfall_median_bps": 5.277912248873731,
+      "shortfall_std_bps": 27.211904793632662,
+      "fill_ratio": 1.0,
+      "maker_ratio": 0.9105523163487128,
+      "n_orders": 60.0,
+      "learned_rounds_shortfall_bps": 0.539540598459011,
+      "n_seeds": 2.0
+    }
+  },
+  "settings": {
+    "rounds": 6,
+    "orders_per_round": 5,
+    "seeds": [
+      1,
+      2
+    ],
+    "duration_s": 900,
+    "step_s": 1.0,
+    "arm_counts": {
+      "twap": 18,
+      "almgren_chriss": 8,
+      "pov": 10,
+      "adaptive_passive": 8,
+      "kalman_pid": 16
+    },
+    "budget": "standard",
+    "seed": 0
+  },
+  "objective": "learned_rounds_shortfall_bps",
+  "higher_is_better": false,
+  "passed": true,
+  "verdict": "后半程实现偏差 -1.60 bps vs 规则基线 0.54 bps；全程 3.26 vs 8.63；各臂被选次数 {'twap': 18, 'almgren_chriss': 8, 'pov': 10, 'adaptive_passive': 8, 'kalman_pid': 16}。",
+  "notes": [
+    "通过条件：后半程平均实现偏差 ≤ 基线 + 1.0 bps。前 warmup 轮沿用基线规则，因此全程差异主要来自后半程。"
+  ],
+  "wall_s": 17.21692395210266,
+  "created_at": "2026-10-22T11:41:35+00:00"
+}

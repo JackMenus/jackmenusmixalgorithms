@@ -98,3 +98,31 @@ def test_crossquant_kalman_tracks_simulated_mid():
         level = est.update(snap.mid, ts)
     assert abs(level - mids[-1]) / mids[-1] < 0.01            # 滤波水平贴近最新中间价
     assert abs(est.predict(5_000_000) - mids[-1]) / mids[-1] < 0.02
+
+
+# ----------------------------------------------------------------------------- 自主生成算法库 autoalgo
+AUTOALGO_OK = all(discover([k]).get(k) for k in ("autoalgo", "factormine", "order_placement", "latency_routing", "crossquant"))
+
+
+@pytest.mark.skipif(not AUTOALGO_OK, reason="autoalgo 或其依赖的兄弟库不可用")
+def test_autoalgo_kinds_wire_into_pipeline():
+    from quantstack.contracts import PortfolioConstructor
+    from quantstack.core.registry import make_portfolio, make_strategy_selector, plugin_registry
+
+    reg = plugin_registry()
+    assert any(k.startswith("autoalgo.") for k in reg["AlphaModel"]) and any(k.startswith("autoalgo.") for k in reg["Router"])
+    assert "StrategySelector" in reg and "PortfolioConstructor" in reg
+    assert isinstance(make_portfolio("autoalgo.family.portfolio.denoised_riskparity", top_k=5), PortfolioConstructor)
+    assert callable(make_strategy_selector("autoalgo.family.selector.bandit"))
+
+    panel = make_synthetic_panel(160, 12, seed=21)
+    kinds = {"alpha": "autoalgo.family.alpha.signature", "execution": "autoalgo.family.execution.kalman_pid", "router": "autoalgo.family.router.bayesian_venue",
+             "portfolio": "autoalgo.family.portfolio.denoised_riskparity", "selector": "autoalgo.family.selector.bandit"}
+    pipe = build_sim_pipeline(panel, kinds=kinds, seed=21, initial_cash=2e6, limits=RiskLimits(max_order_notional=200_000, max_position_notional=300_000),
+                              portfolio_cfg={"top_k": 3, "gross_target": 0.5})
+    assert isinstance(pipe.alpha_model, AlphaModel) and isinstance(pipe.execution_factory, ExecutionStrategyFactory) and isinstance(pipe.router, Router)
+    assert "kalman_pid" in pipe.execution_factory.available()
+    res = pipe.run_cycle(panel)
+    assert res.orders and all(o.filled_quantity <= o.quantity for o in res.orders)
+    assert res.tca_summary["avg_fill_ratio"] > 0.8
+    assert pipe.strategy_selector.describe()["n_select"] == len(res.orders)

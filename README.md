@@ -1,6 +1,6 @@
 # jackmenusmixalgorithms
 
-量化算法交易算法库合集：四个独立算法库 + 一个把它们串成全栈交易系统的集成层（agent）。
+量化算法交易算法库合集：四个独立算法库 + 一个把它们串成全栈交易系统的集成层（agent）+ 一个在它们之上自主生成新算法的库。
 
 | 目录 | 包名 | 内容 |
 |---|---|---|
@@ -9,6 +9,7 @@
 | `routing_latency/` | `latency_routing` | 延迟感知的智能路由 |
 | `physics_math_control/` | `crossquant` | 物理 / 数学 / 控制论交叉算法库 |
 | `trading_system/` | `quantstack` | 集成层与 LLM agent，统一契约见 `trading_system/docs/INTERFACES.md` |
+| `auto_algorithms/` | `autoalgo` | 自主生成算法库：在上述库之上拼装新算法，自动评估、生成代码与中文可解释性文档，产物在 `auto_algorithms/generated/` |
 
 ## 快速开始
 
@@ -21,9 +22,13 @@ pip install -r requirements.txt
 (cd routing_latency && pytest -q)
 (cd physics_math_control && pytest -q)
 (cd trading_system && pytest -q)
+(cd auto_algorithms && pytest -q)
 
 # 端到端离线演示（自动发现同级的四个库）
 cd trading_system && python -m quantstack.agent.cli demo --kinds auto
+
+# 自主生成新算法（含评估 + 中文可解释性 md），结果写入 auto_algorithms/generated/
+cd auto_algorithms && python -m autoalgo generate --budget quick --proposer evolution
 ```
 
 `quantstack` 默认在 `trading_system/` 的上一级目录寻找兄弟库，可用环境变量 `QUANT_PROJECT_ROOT` 覆盖。

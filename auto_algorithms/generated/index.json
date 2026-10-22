@@ -1,0 +1,134 @@
+[
+  {
+    "algo_id": "cross_operator_mined_alpha",
+    "name_zh": "跨学科算子遗传规划因子",
+    "protocol": "AlphaModel",
+    "family": "alpha.cross_operator_mined",
+    "registry_kind": "autoalgo.cross_operator_mined_alpha",
+    "objective": "rank_ic",
+    "primary": 0.022173136237409213,
+    "baseline": 0.03408426611364733,
+    "higher_is_better": true,
+    "passed": true,
+    "created_at": "2026-10-22T11:37:57+00:00",
+    "libraries": [
+      "factormine"
+    ],
+    "path": "cross_operator_mined_alpha/algorithm.py",
+    "markdown": "cross_operator_mined_alpha/cross_operator_mined_alpha.md"
+  },
+  {
+    "algo_id": "regime_gated_alpha",
+    "name_zh": "市场状态门控多因子模型",
+    "protocol": "AlphaModel",
+    "family": "alpha.regime_gated",
+    "registry_kind": "autoalgo.regime_gated_alpha",
+    "objective": "rank_ic",
+    "primary": 0.023381106794097058,
+    "baseline": 0.03408426611364733,
+    "higher_is_better": true,
+    "passed": true,
+    "created_at": "2026-10-22T11:36:10+00:00",
+    "libraries": [
+      "factormine",
+      "crossquant"
+    ],
+    "path": "regime_gated_alpha/algorithm.py",
+    "markdown": "regime_gated_alpha/regime_gated_alpha.md"
+  },
+  {
+    "algo_id": "signature_alpha",
+    "name_zh": "路径签名因子模型",
+    "protocol": "AlphaModel",
+    "family": "alpha.signature",
+    "registry_kind": "autoalgo.signature_alpha",
+    "objective": "rank_ic",
+    "primary": 0.021901490327077198,
+    "baseline": 0.03408426611364733,
+    "higher_is_better": true,
+    "passed": true,
+    "created_at": "2026-10-22T11:36:39+00:00",
+    "libraries": [
+      "crossquant"
+    ],
+    "path": "signature_alpha/algorithm.py",
+    "markdown": "signature_alpha/signature_alpha.md"
+  },
+  {
+    "algo_id": "kalman_pid_execution",
+    "name_zh": "Kalman 公允价 + PID 反馈的 Almgren–Chriss 执行",
+    "protocol": "ExecutionStrategy",
+    "family": "execution.kalman_pid",
+    "registry_kind": "autoalgo.kalman_pid_execution",
+    "objective": "shortfall_bps",
+    "primary": -1.6248661272888696,
+    "baseline": 3.2135707614172704,
+    "higher_is_better": false,
+    "passed": true,
+    "created_at": "2026-10-22T11:39:17+00:00",
+    "libraries": [
+      "crossquant",
+      "order_placement"
+    ],
+    "path": "kalman_pid_execution/algorithm.py",
+    "markdown": "kalman_pid_execution/kalman_pid_execution.md"
+  },
+  {
+    "algo_id": "denoised_riskparity_portfolio",
+    "name_zh": "随机矩阵去噪协方差的多空组合（均值-方差 / 层次风险平价）",
+    "protocol": "PortfolioConstructor",
+    "family": "portfolio.denoised_riskparity",
+    "registry_kind": "autoalgo.denoised_riskparity_portfolio",
+    "objective": "sharpe",
+    "primary": 4.035865833123011,
+    "baseline": 3.93984443519169,
+    "higher_is_better": true,
+    "passed": true,
+    "created_at": "2026-10-22T11:38:44+00:00",
+    "libraries": [
+      "crossquant",
+      "quantstack"
+    ],
+    "path": "denoised_riskparity_portfolio/algorithm.py",
+    "markdown": "denoised_riskparity_portfolio/denoised_riskparity_portfolio.md"
+  },
+  {
+    "algo_id": "bayesian_venue_router",
+    "name_zh": "Thompson 采样 + 变点监测的场所路由叠加层",
+    "protocol": "Router",
+    "family": "router.bayesian_venue",
+    "registry_kind": "autoalgo.bayesian_venue_router",
+    "objective": "shortfall_bps",
+    "primary": 1.858486028167909,
+    "baseline": 9.437645160985165,
+    "higher_is_better": false,
+    "passed": true,
+    "created_at": "2026-10-22T12:03:18+00:00",
+    "libraries": [
+      "crossquant",
+      "latency_routing"
+    ],
+    "path": "bayesian_venue_router/algorithm.py",
+    "markdown": "bayesian_venue_router/bayesian_venue_router.md"
+  },
+  {
+    "algo_id": "bandit_strategy_selector",
+    "name_zh": "上下文老虎机执行策略选择器",
+    "protocol": "StrategySelector",
+    "family": "selector.bandit",
+    "registry_kind": "autoalgo.bandit_strategy_selector",
+    "objective": "learned_rounds_shortfall_bps",
+    "primary": -1.6033286387195098,
+    "baseline": 0.539540598459011,
+    "higher_is_better": false,
+    "passed": true,
+    "created_at": "2026-10-22T11:42:06+00:00",
+    "libraries": [
+      "crossquant",
+      "order_placement",
+      "quantstack"
+    ],
+    "path": "bandit_strategy_selector/algorithm.py",
+    "markdown": "bandit_strategy_selector/bandit_strategy_selector.md"
+  }
+]

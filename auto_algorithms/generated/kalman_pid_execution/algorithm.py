@@ -1,0 +1,452 @@
+"""Kalman 公允价 + PID 反馈的 Almgren–Chriss 执行（autoalgo 自主生成，algo_id = kalman_pid_execution）
+
+协议：ExecutionStrategy；模板族：execution.kalman_pid；注册名：autoalgo.kalman_pid_execution
+Almgren–Chriss 轨迹是开环的：被动成交偏慢时会持续落后，最后不得不大量吃单；它也不看盘中价格相对公允价的位置。用 Kalman 局部线性趋势模型滤波中间价得到平滑公允价：reversion 模式把中间价对公允价的偏离视为暂时性（自身冲击、报价噪声），偏贵时放慢并后撤一跳等价格回来、便宜时加速并改善一跳；momentum 模式则按斜率外推追趋势。两种用法谁对由评估决定。再用 PID/LQR 把'计划−实际完成比例'的误差闭环反馈到计划量上，防止持续落后或超前。
+
+评估：shortfall_bps = -1.625（基线 3.214），通过。
+
+说明文档：kalman_pid_execution.md（同目录）。本文件由 autoalgo.codegen 生成，参数来自生成管线的搜索结果；
+手工修改请改 PARAMS 或在 make(**overrides) 传入覆盖值。
+"""
+
+from __future__ import annotations
+
+import json
+import os
+
+ALGO_ID = 'kalman_pid_execution'
+PROTOCOL = 'ExecutionStrategy'
+FAMILY = 'execution.kalman_pid'
+REGISTRY_KIND = 'autoalgo.kalman_pid_execution'
+NAME_ZH = 'Kalman 公允价 + PID 反馈的 Almgren–Chriss 执行'
+GENERATOR_VERSION = '0.1.0'
+
+PARAMS = {
+    "mode": "reversion",
+    "controller": "lqr",
+    "kp": 0.5,
+    "ki": 0.05,
+    "ctrl_out_max": 0.2,
+    "kf_obs_mult": 10.0,
+    "fair_horizon_s": 30.0,
+    "drift_threshold_bps": 1.0,
+    "drift_gain": 1.0,
+    "improve_threshold_bps": 1.5,
+    "backoff": 1.0
+}
+
+BLUEPRINT = {
+    "algo_id": "kalman_pid_execution",
+    "name_zh": "Kalman 公允价 + PID 反馈的 Almgren–Chriss 执行",
+    "protocol": "ExecutionStrategy",
+    "family": "execution.kalman_pid",
+    "params": {
+        "mode": "reversion",
+        "controller": "lqr",
+        "kp": 0.5,
+        "ki": 0.05,
+        "ctrl_out_max": 0.2,
+        "kf_obs_mult": 10.0,
+        "fair_horizon_s": 30.0,
+        "drift_threshold_bps": 1.0,
+        "drift_gain": 1.0,
+        "improve_threshold_bps": 1.5,
+        "backoff": 1.0
+    },
+    "components": [
+        {
+            "name": "KalmanTrendEstimator",
+            "library": "crossquant",
+            "path": "crossquant.KalmanTrendEstimator",
+            "role": "局部线性趋势 Kalman：公允价滤波与外推"
+        },
+        {
+            "name": "PIDParticipationController",
+            "library": "crossquant",
+            "path": "crossquant.PIDParticipationController / LQRTrackingController",
+            "role": "执行进度反馈控制"
+        },
+        {
+            "name": "QuantstackExecution",
+            "library": "order_placement",
+            "path": "order_placement.adapters.quantstack_exec.QuantstackExecution",
+            "role": "执行策略基类：计划曲线、追单/被动挂单、在途簿记、§8 撤单约定"
+        },
+        {
+            "name": "plan",
+            "library": "order_placement",
+            "path": "order_placement.adapters.quantstack_exec.AlmgrenChrissExec.plan",
+            "role": "Almgren–Chriss 最优轨迹（urgency→λ，alpha→漂移）"
+        },
+        {
+            "name": "queue_value",
+            "library": "order_placement",
+            "path": "order_placement.queue.models.queue_value",
+            "role": "排队价值判断（挂近端还是改善一跳）"
+        },
+        {
+            "name": "make_execution_factory",
+            "library": "order_placement",
+            "path": "order_placement.make_execution_factory",
+            "role": "8 种基础执行策略工厂（被 AutoExecutionFactory 包裹）"
+        }
+    ],
+    "hypothesis": "Almgren–Chriss 轨迹是开环的：被动成交偏慢时会持续落后，最后不得不大量吃单；它也不看盘中价格相对公允价的位置。用 Kalman 局部线性趋势模型滤波中间价得到平滑公允价：reversion 模式把中间价对公允价的偏离视为暂时性（自身冲击、报价噪声），偏贵时放慢并后撤一跳等价格回来、便宜时加速并改善一跳；momentum 模式则按斜率外推追趋势。两种用法谁对由评估决定。再用 PID/LQR 把'计划−实际完成比例'的误差闭环反馈到计划量上，防止持续落后或超前。",
+    "mechanism": [
+        "继承 order_placement.QuantstackExecution，计划曲线取 AlmgrenChrissExec.plan（urgency→λ，alpha→漂移）。",
+        "每个 on_market：Kalman 更新 (level, slope)。reversion：pred = −side·(mid − level)/mid；momentum：pred = side·(slope·h)/mid（bps，正 = 不利 / 应加速）。",
+        "urgency_target = AC 目标 + u·Q（u = 控制器对误差 e=(目标−已成交)/Q 的输出）± drift_gain·k·切片（k=|pred|/阈值，上限 drift_max_slices）。",
+        "passive_price：pred > improve_threshold → 近端改善一跳（不穿越对手价）；pred < −阈值且 backoff → 后撤一跳。",
+        "追单 / 扫尾 / 撤单簿记全部沿用基类，满足 §8 全部约定。"
+    ],
+    "assumptions": [
+        "中间价对平滑公允价的偏离在 10–60 秒尺度上会部分回复（冲击衰减、报价噪声），或存在可外推的短期趋势。",
+        "快照包含 adv / volatility，用于 AC 参数与 Kalman 噪声尺度。"
+    ],
+    "risks": [
+        "reversion 模式在真实趋势行情中会越贵越等、越便宜越追（被动等待的机会成本）；momentum 模式会把自身冲击当成趋势追涨杀跌。",
+        "阈值过低会频繁改价增加撤改量；PID 积分项在长时间无成交时累积，ctrl_out_max 限幅防止突然大量吃单。",
+        "模拟器只对主动成交施加冲击、被动成交近乎免费，因此更被动的配置在模拟器里天然占优；真实市场的逆向选择成本会改变最优参数。"
+    ],
+    "param_doc": {
+        "mode": "Kalman 信号用法：reversion / momentum",
+        "controller": "pid / lqr",
+        "kp": "比例增益",
+        "ki": "积分增益（每秒）",
+        "ctrl_out_max": "控制量上限（占母单比例）",
+        "kf_obs_mult": "观测噪声倍数（越大公允价越平滑）",
+        "fair_horizon_s": "momentum 外推时长（秒）",
+        "drift_threshold_bps": "信号生效阈值（bps）",
+        "drift_gain": "每倍阈值提前/推后的切片数（0 = 关闭节奏调节）",
+        "improve_threshold_bps": "改善/后撤一跳的阈值（bps）",
+        "backoff": "信号有利时是否后撤一跳"
+    },
+    "search_space": {
+        "mode": [
+            "choice",
+            [
+                "reversion",
+                "momentum"
+            ]
+        ],
+        "controller": [
+            "choice",
+            [
+                "pid",
+                "lqr"
+            ]
+        ],
+        "kp": [
+            "float",
+            0.1,
+            1.5
+        ],
+        "ki": [
+            "logfloat",
+            0.002,
+            0.2
+        ],
+        "ctrl_out_max": [
+            "choice",
+            [
+                0.1,
+                0.2,
+                0.3,
+                0.5
+            ]
+        ],
+        "kf_obs_mult": [
+            "choice",
+            [
+                1.0,
+                10.0,
+                50.0,
+                200.0
+            ]
+        ],
+        "fair_horizon_s": [
+            "choice",
+            [
+                10.0,
+                30.0,
+                60.0
+            ]
+        ],
+        "drift_threshold_bps": [
+            "float",
+            0.3,
+            4.0
+        ],
+        "drift_gain": [
+            "float",
+            0.0,
+            2.0
+        ],
+        "improve_threshold_bps": [
+            "float",
+            0.5,
+            6.0
+        ],
+        "backoff": [
+            "choice",
+            [
+                0.0,
+                1.0
+            ]
+        ]
+    },
+    "lineage": {
+        "generator": "autoalgo.pipeline.generate",
+        "generator_version": "0.1.0",
+        "proposer": "evolution",
+        "model": "",
+        "effort": "",
+        "llm_error": "",
+        "seed": 0,
+        "budget": "standard",
+        "train_ratio": 0.7,
+        "n_candidates": 9,
+        "panel": {
+            "n_days": 600,
+            "n_assets": 60,
+            "start": "2021-01-04",
+            "end": "2023-04-21"
+        },
+        "candidates": [
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "pid",
+                    "kp": 0.5,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 30.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "default",
+                "objective": "shortfall_bps",
+                "value": -0.21441765430365822,
+                "score": 0.21441765430365822,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 9.5
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "pid",
+                    "kp": 0.5,
+                    "ki": 0.10013357327127705,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 30.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": 3.777190148045447,
+                "score": -3.777190148045447,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 3.8
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "lqr",
+                    "kp": 0.5,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 30.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": -1.6248661272888696,
+                "score": 1.6248661272888696,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 2.7
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "pid",
+                    "kp": 0.7444518027340778,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.1,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 30.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": 4.930131240310518,
+                "score": -4.930131240310518,
+                "passed": False,
+                "rationale": "",
+                "wall_s": 2.7
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "lqr",
+                    "kp": 0.5,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 60.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": -1.6248661272888696,
+                "score": 1.6248661272888696,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 2.6
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "lqr",
+                    "kp": 0.5,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 50.0,
+                    "fair_horizon_s": 60.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": 4.220317609961137,
+                "score": -4.220317609961137,
+                "passed": False,
+                "rationale": "",
+                "wall_s": 2.8
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "lqr",
+                    "kp": 0.5,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 200.0,
+                    "fair_horizon_s": 60.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": 2.3989778053908903,
+                "score": -2.3989778053908903,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 2.5
+            },
+            {
+                "params": {
+                    "mode": "momentum",
+                    "controller": "lqr",
+                    "kp": 0.7033062609053742,
+                    "ki": 0.05,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 60.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": 6.330631410625149,
+                "score": -6.330631410625149,
+                "passed": False,
+                "rationale": "",
+                "wall_s": 3.1
+            },
+            {
+                "params": {
+                    "mode": "reversion",
+                    "controller": "lqr",
+                    "kp": 0.7205247020776434,
+                    "ki": 0.16047863168003496,
+                    "ctrl_out_max": 0.2,
+                    "kf_obs_mult": 10.0,
+                    "fair_horizon_s": 30.0,
+                    "drift_threshold_bps": 1.0,
+                    "drift_gain": 1.0,
+                    "improve_threshold_bps": 1.5,
+                    "backoff": 1.0
+                },
+                "source": "evolution",
+                "objective": "shortfall_bps",
+                "value": -1.6248661272888696,
+                "score": 1.6248661272888696,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 2.9
+            }
+        ],
+        "selected_score": 1.6248661272888696
+    },
+    "registry_kind": "autoalgo.kalman_pid_execution",
+    "created_at": "2026-10-22T11:39:17+00:00",
+    "generator_version": "0.1.0"
+}
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _ensure_siblings():
+    """确保 autoalgo 及其兄弟库可导入（独立脚本直接 import 本文件时也能工作）。"""
+    import sys
+
+    lib_root = os.path.dirname(os.path.dirname(_HERE))
+    if lib_root not in sys.path:
+        sys.path.insert(0, lib_root)
+    from autoalgo._paths import ensure_siblings
+
+    ensure_siblings()
+
+
+def make(base=None, factory_cfg=None, **overrides):
+    """实例化 Kalman 公允价 + PID 反馈的 Almgren–Chriss 执行；overrides 覆盖 PARAMS。"""
+    _ensure_siblings()
+    from autoalgo.components.execution import AutoExecutionFactory
+
+    params = {**PARAMS, **overrides}
+    return AutoExecutionFactory(base=base, params=params, **(factory_cfg or {}))
+
+
+def evaluation():
+    """读取同目录的 evaluation.json（若存在）。"""
+    p = os.path.join(_HERE, 'evaluation.json')
+    if not os.path.exists(p):
+        return None
+    with open(p, encoding='utf-8') as f:
+        return json.load(f)

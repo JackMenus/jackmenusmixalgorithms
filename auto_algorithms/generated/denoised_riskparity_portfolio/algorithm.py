@@ -1,0 +1,426 @@
+"""随机矩阵去噪协方差的多空组合（均值-方差 / 层次风险平价）（autoalgo 自主生成，algo_id = denoised_riskparity_portfolio）
+
+协议：PortfolioConstructor；模板族：portfolio.denoised_riskparity；注册名：autoalgo.denoised_riskparity_portfolio
+按信号强度加权的多空组合不看协方差：它把风险集中在高波动标的上，也不对冲共同因子暴露。样本协方差在 N/T 不小时被噪声特征值主导（Marchenko–Pastur），直接做均值-方差会放大噪声；用随机矩阵理论（RIE / 特征值裁剪）去噪后再做均值-方差（或层次风险平价 + 信号倾斜），应当在同等信号下获得更高的风险调整收益。注意：若 alpha 本身与个股波动率成正比（如 quantstack 合成面板的植入信号），分数加权已接近最优，可提升空间有限。
+
+评估：sharpe = 4.036（基线 3.94），通过。
+
+说明文档：denoised_riskparity_portfolio.md（同目录）。本文件由 autoalgo.codegen 生成，参数来自生成管线的搜索结果；
+手工修改请改 PARAMS 或在 make(**overrides) 传入覆盖值。
+"""
+
+from __future__ import annotations
+
+import json
+import os
+
+ALGO_ID = 'denoised_riskparity_portfolio'
+PROTOCOL = 'PortfolioConstructor'
+FAMILY = 'portfolio.denoised_riskparity'
+REGISTRY_KIND = 'autoalgo.denoised_riskparity_portfolio'
+NAME_ZH = '随机矩阵去噪协方差的多空组合（均值-方差 / 层次风险平价）'
+GENERATOR_VERSION = '0.1.0'
+
+PARAMS = {
+    "top_k": 15,
+    "gross_target": 1.0,
+    "max_weight": 0.08,
+    "lookback": 120,
+    "denoise": "rie",
+    "allocator": "mv",
+    "tilt": 0.900478516729051,
+    "kelly_fraction": 0.0,
+    "cost_threshold_bps": 0.0,
+    "neutralize": "dollar"
+}
+
+BLUEPRINT = {
+    "algo_id": "denoised_riskparity_portfolio",
+    "name_zh": "随机矩阵去噪协方差的多空组合（均值-方差 / 层次风险平价）",
+    "protocol": "PortfolioConstructor",
+    "family": "portfolio.denoised_riskparity",
+    "params": {
+        "top_k": 15,
+        "gross_target": 1.0,
+        "max_weight": 0.08,
+        "lookback": 120,
+        "denoise": "rie",
+        "allocator": "mv",
+        "tilt": 0.900478516729051,
+        "kelly_fraction": 0.0,
+        "cost_threshold_bps": 0.0,
+        "neutralize": "dollar"
+    },
+    "components": [
+        {
+            "name": "denoise_covariance",
+            "library": "crossquant",
+            "path": "crossquant.physics.random_matrix.denoise_covariance",
+            "role": "随机矩阵理论（MP 裁剪 / RIE / Ledoit–Wolf）协方差去噪"
+        },
+        {
+            "name": "hierarchical_risk_parity",
+            "library": "crossquant",
+            "path": "crossquant.physics.networks.hierarchical_risk_parity",
+            "role": "层次风险平价权重"
+        },
+        {
+            "name": "kelly_multi_asset",
+            "library": "crossquant",
+            "path": "crossquant.mathematics.kelly.kelly_multi_asset",
+            "role": "多资产 Kelly 杠杆"
+        },
+        {
+            "name": "LongShortConstructor",
+            "library": "quantstack",
+            "path": "quantstack.reference.portfolio.LongShortConstructor",
+            "role": "多空选股与单票上限规则（基线）"
+        }
+    ],
+    "hypothesis": "按信号强度加权的多空组合不看协方差：它把风险集中在高波动标的上，也不对冲共同因子暴露。样本协方差在 N/T 不小时被噪声特征值主导（Marchenko–Pastur），直接做均值-方差会放大噪声；用随机矩阵理论（RIE / 特征值裁剪）去噪后再做均值-方差（或层次风险平价 + 信号倾斜），应当在同等信号下获得更高的风险调整收益。注意：若 alpha 本身与个股波动率成正比（如 quantstack 合成面板的植入信号），分数加权已接近最优，可提升空间有限。",
+    "mechanism": [
+        "按分数取多头 top_k（score>0）与空头 top_k（score<0）；cost_threshold_bps>0 时剔除期望收益低于门槛的标的（默认 0：弱 alpha 下硬门槛会把组合压成一两只股票）。",
+        "最近 lookback 期收益 → denoise_covariance(method) 得去噪协方差 Σ。",
+        "allocator=mv：Σ̂ 的最大特征对给出共同因子载荷 β̂=√λ₁·v₁ 与特质方差 σ²_ε=diag(Σ̂)−β̂²；腿内 w_i ∝ μ_i/σ²_ε,i；neutralize=dollar 按 net_target 分配两腿；neutralize=beta 用多空两腿规模抵消 Σw_iβ̂_i（每腿 35%–65%）；最后迭代裁剪单票上限。",
+        "allocator=hrp/ivp/equal：每腿先求风险权重 w_risk，再 w ∝ w_risk^(1−tilt) · (|z|/mean|z|)^tilt，归一到腿目标敞口并裁剪。",
+        "kelly_fraction>0 时用多资产 Kelly f*=Σ⁻¹μ 的分数杠杆限制总敞口。",
+        "生成 TargetPosition：紧急度由置信度与 IC 半衰期决定（沿用参考实现规则），不在目标集合的持仓平仓。"
+    ],
+    "assumptions": [
+        "历史收益窗口 ≥ 30 期且覆盖全部候选标的；相关结构在窗口内近似平稳。",
+        "信号分数与期望收益的方向一致。"
+    ],
+    "risks": [
+        "风险平价会把权重推向低波动资产，若信号主要在高波动资产上，tilt 过小会稀释 alpha；mv 对期望收益的尺度误差敏感（已用去噪 + 岭正则 + 单票上限约束）。",
+        "HRP 的聚类顺序对相关矩阵的小扰动敏感；去噪方法 lw 在 T≫N 时与样本协方差差别很小。",
+        "Kelly 杠杆依赖期望收益的尺度，信号 IC 高估时会过度加杠杆（已用 fraction 与上限约束）。"
+    ],
+    "param_doc": {
+        "top_k": "每腿最多标的数",
+        "gross_target": "总敞口/NAV",
+        "max_weight": "单票权重上限",
+        "lookback": "协方差估计窗口",
+        "denoise": "去噪方法",
+        "allocator": "权重配置方法（mv/hrp/ivp/equal）",
+        "tilt": "信号倾斜强度（仅 hrp/ivp/equal）",
+        "kelly_fraction": "分数 Kelly 比例（0 关闭）",
+        "cost_threshold_bps": "期望收益成本门槛（0 关闭）",
+        "neutralize": "mv 的两腿规模规则：beta 中性 / dollar 中性"
+    },
+    "search_space": {
+        "top_k": [
+            "choice",
+            [
+                8,
+                10,
+                15
+            ]
+        ],
+        "lookback": [
+            "choice",
+            [
+                60,
+                120,
+                180
+            ]
+        ],
+        "denoise": [
+            "choice",
+            [
+                "rie",
+                "clip",
+                "lw",
+                "none"
+            ]
+        ],
+        "allocator": [
+            "choice",
+            [
+                "mv",
+                "hrp",
+                "ivp",
+                "equal"
+            ]
+        ],
+        "tilt": [
+            "float",
+            0.0,
+            1.0
+        ],
+        "kelly_fraction": [
+            "choice",
+            [
+                0.0,
+                0.25,
+                0.5
+            ]
+        ],
+        "max_weight": [
+            "choice",
+            [
+                0.06,
+                0.08,
+                0.12
+            ]
+        ],
+        "cost_threshold_bps": [
+            "choice",
+            [
+                0.0,
+                1.0,
+                2.0
+            ]
+        ],
+        "neutralize": [
+            "choice",
+            [
+                "dollar",
+                "beta"
+            ]
+        ]
+    },
+    "lineage": {
+        "generator": "autoalgo.pipeline.generate",
+        "generator_version": "0.1.0",
+        "proposer": "evolution",
+        "model": "",
+        "effort": "",
+        "llm_error": "",
+        "seed": 0,
+        "budget": "standard",
+        "train_ratio": 0.7,
+        "n_candidates": 9,
+        "panel": {
+            "n_days": 600,
+            "n_assets": 60,
+            "start": "2021-01-04",
+            "end": "2023-04-21"
+        },
+        "candidates": [
+            {
+                "params": {
+                    "top_k": 10,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.5,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "dollar"
+                },
+                "source": "default",
+                "objective": "sharpe",
+                "value": 3.3825923848415087,
+                "score": 3.3825923848415087,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 4.4
+            },
+            {
+                "params": {
+                    "top_k": 10,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.5,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "beta"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.194488472254385,
+                "score": 3.194488472254385,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 4.3
+            },
+            {
+                "params": {
+                    "top_k": 15,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.900478516729051,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "dollar"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 4.035865833123011,
+                "score": 4.035865833123011,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 5.2
+            },
+            {
+                "params": {
+                    "top_k": 10,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.37336118196155466,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "dollar"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.3825923848415087,
+                "score": 3.3825923848415087,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 4.2
+            },
+            {
+                "params": {
+                    "top_k": 15,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "hrp",
+                    "tilt": 0.900478516729051,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "dollar"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.921308669518241,
+                "score": 3.921308669518241,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 6.3
+            },
+            {
+                "params": {
+                    "top_k": 15,
+                    "gross_target": 1.0,
+                    "max_weight": 0.06,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "hrp",
+                    "tilt": 0.900478516729051,
+                    "kelly_fraction": 0.5,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "dollar"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.9186570874738376,
+                "score": 3.9186570874738376,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 7.2
+            },
+            {
+                "params": {
+                    "top_k": 15,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 180,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.900478516729051,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "dollar"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.989855235832902,
+                "score": 3.989855235832902,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 5.2
+            },
+            {
+                "params": {
+                    "top_k": 15,
+                    "gross_target": 1.0,
+                    "max_weight": 0.06,
+                    "lookback": 180,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.900478516729051,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 2.0,
+                    "neutralize": "dollar"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.984494674229982,
+                "score": 3.984494674229982,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 5.9
+            },
+            {
+                "params": {
+                    "top_k": 15,
+                    "gross_target": 1.0,
+                    "max_weight": 0.08,
+                    "lookback": 120,
+                    "denoise": "rie",
+                    "allocator": "mv",
+                    "tilt": 0.900478516729051,
+                    "kelly_fraction": 0.0,
+                    "cost_threshold_bps": 0.0,
+                    "neutralize": "beta"
+                },
+                "source": "evolution",
+                "objective": "sharpe",
+                "value": 3.853738955122445,
+                "score": 3.853738955122445,
+                "passed": True,
+                "rationale": "",
+                "wall_s": 5.2
+            }
+        ],
+        "selected_score": 4.035865833123011
+    },
+    "registry_kind": "autoalgo.denoised_riskparity_portfolio",
+    "created_at": "2026-10-22T11:38:44+00:00",
+    "generator_version": "0.1.0"
+}
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _ensure_siblings():
+    """确保 autoalgo 及其兄弟库可导入（独立脚本直接 import 本文件时也能工作）。"""
+    import sys
+
+    lib_root = os.path.dirname(os.path.dirname(_HERE))
+    if lib_root not in sys.path:
+        sys.path.insert(0, lib_root)
+    from autoalgo._paths import ensure_siblings
+
+    ensure_siblings()
+
+
+def make(**overrides):
+    """实例化 随机矩阵去噪协方差的多空组合（均值-方差 / 层次风险平价）；overrides 覆盖 PARAMS。"""
+    _ensure_siblings()
+    from autoalgo.components.portfolio import DenoisedRiskParityConstructor
+
+    return DenoisedRiskParityConstructor(**{**PARAMS, **overrides})
+
+
+def evaluation():
+    """读取同目录的 evaluation.json（若存在）。"""
+    p = os.path.join(_HERE, 'evaluation.json')
+    if not os.path.exists(p):
+        return None
+    with open(p, encoding='utf-8') as f:
+        return json.load(f)

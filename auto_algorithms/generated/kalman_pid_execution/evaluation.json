@@ -1,0 +1,68 @@
+{
+  "algo_id": "kalman_pid_execution",
+  "protocol": "ExecutionStrategy",
+  "metrics": {
+    "shortfall_bps": -1.6248661272888696,
+    "shortfall_median_bps": -1.9467794903775437,
+    "shortfall_std_bps": 13.271980926519666,
+    "fill_ratio": 1.0,
+    "maker_ratio": 0.4346773965367165,
+    "n_orders": 16.0,
+    "n_seeds": 4.0,
+    "wins_vs_baseline": 0.75
+  },
+  "baselines": {
+    "order_placement.almgren_chriss": {
+      "shortfall_bps": 3.2135707614172704,
+      "shortfall_median_bps": 5.82363438682116,
+      "shortfall_std_bps": 9.04278138210233,
+      "fill_ratio": 1.0,
+      "maker_ratio": 0.8994744883790912,
+      "n_orders": 16.0
+    },
+    "order_placement.twap": {
+      "shortfall_bps": 3.864742853274482,
+      "shortfall_median_bps": 3.5872469631772974,
+      "shortfall_std_bps": 24.2186141938643,
+      "fill_ratio": 1.0,
+      "maker_ratio": 0.9906456211116523,
+      "n_orders": 16.0
+    }
+  },
+  "settings": {
+    "n_orders_per_seed": 4,
+    "seeds": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "duration_s": 900,
+    "step_s": 1.0,
+    "params": {
+      "mode": "reversion",
+      "controller": "lqr",
+      "kp": 0.5,
+      "ki": 0.05,
+      "ctrl_out_max": 0.2,
+      "kf_obs_mult": 10.0,
+      "fair_horizon_s": 30.0,
+      "drift_threshold_bps": 1.0,
+      "drift_gain": 1.0,
+      "improve_threshold_bps": 1.5,
+      "backoff": 1.0
+    },
+    "market": "quantstack 合成多场所模拟器（参考路由器）",
+    "budget": "standard",
+    "seed": 0
+  },
+  "objective": "shortfall_bps",
+  "higher_is_better": false,
+  "passed": true,
+  "verdict": "实现偏差 -1.62 bps vs order_placement.almgren_chriss 3.21 bps（逐种子胜率 75%）；成交率 1.000，被动成交占比 0.43。",
+  "notes": [
+    "通过条件：平均实现偏差 ≤ 第一基线 + 1.0 bps 且成交率 ≥ 0.95。单路径噪声可达 20 bps，种子数越多结论越可靠。"
+  ],
+  "wall_s": 2.73486590385437,
+  "created_at": "2026-10-22T11:39:00+00:00"
+}

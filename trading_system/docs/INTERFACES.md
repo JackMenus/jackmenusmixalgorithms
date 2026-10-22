@@ -165,3 +165,30 @@ class ImpactModel(Protocol):       # 冲击/成本模型（平方根律、Almgre
 | 被动成交与冲击 | 模拟器只对主动（taker）成交施加冲击；被动成交不计冲击。比较策略成本请用多个种子取平均（单路径噪声可达 20bps）。 |
 | 入口函数 | `factormine.make_alpha_model(library=None, method="max_ir", horizon=1, bar_us=23_400_000_000, mine_budget=100, seed=0, llm=None)`、`factormine.make_miner(...)`；`order_placement.make_execution_factory(**cfg)`（cfg: trading_seconds_per_day / bucket_s / refresh_s）、`order_placement.make_impact_model()`；`latency_routing.make_router(venues, latency_prior_us=None, default_latency_us=500, halflife=200, **cfg)`；`crossquant.registry_entries()`（见 §5 表）。 |
 | 共享路径 | `/mnt/project-files/factor_mining`、`/mnt/project-files/quant/order_placement`、`/mnt/project-files/routing_latency`、`/mnt/project-files/physics_math_control`、`/mnt/project-files/trading_system`（本库）。 |
+
+## 9. 自主生成算法库 autoalgo（2026-10-22 登记）
+
+`/mnt/project-files/auto_algorithms`（包 `autoalgo`）在四个算法库之上按本文档的协议**拼装新算法**，并为每个算法自动产出评估报告与中文可解释性文档，放入 `auto_algorithms/generated/`。它只消费本文档的契约，不新增契约；新增的只有一个"执行策略选择器"的注入点（本来就是 `TradingPipeline.strategy_selector`）。
+
+| 协议 | 生成算法（`generated/` 中的 algo_id） | 模板族 kind | 建立在 |
+|---|---|---|---|
+| AlphaModel | `regime_gated_alpha`（Hurst 状态门控多因子）、`signature_alpha`（路径签名因子）、`cross_operator_mined_alpha`（跨学科算子 GP 挖掘） | `autoalgo.family.alpha.*` | factormine + crossquant |
+| PortfolioConstructor | `denoised_riskparity_portfolio`（RMT 去噪协方差 → 均值-方差 / HRP + 信号倾斜） | `autoalgo.family.portfolio.denoised_riskparity` | crossquant + 参考实现规则 |
+| ExecutionStrategy（经组合式工厂） | `kalman_pid_execution`，策略名 `kalman_pid`（AC 轨迹 × Kalman 公允价 × PID/LQR 反馈） | `autoalgo.family.execution.kalman_pid` | order_placement 基类 + crossquant |
+| StrategySelector | `bandit_strategy_selector`（LinUCB 上下文老虎机，奖励 = −TCA 实现偏差） | `autoalgo.family.selector.bandit` | crossquant + 参考规则冷启动 |
+| Router | `bayesian_venue_router`（Thompson 采样 + BOCPD 退化监测叠加层） | `autoalgo.family.router.bayesian_venue` | latency_routing 适配器 + crossquant |
+
+**kind 命名**：`autoalgo.<algo_id>` 用 `generated/` 中搜索出的参数；`autoalgo.family.<family>` 用模板族默认参数（不依赖生成结果）；`autoalgo.auto`（或 `autoalgo`）取该协议下第一个评估通过的生成算法。`registry.make_alpha_model / make_portfolio / make_execution_factory / make_router / make_strategy_selector` 都接受这些 kind，`build_sim_pipeline(kinds={"alpha": ..., "execution": ..., "router": ..., "portfolio": ..., "selector": ...})` 同样接受（`portfolio` / `selector` 为本次新增键，默认 `reference`）。
+
+**补充约定**：
+
+| 约定 | 内容 |
+|---|---|
+| 组合式执行工厂 | `autoalgo` 的执行工厂包裹挂单库工厂：`available()` = 挂单库 8 种策略 + `kalman_pid`；未知名字透传给挂单库。 |
+| 选择器注入 | 选择器是可调用对象 `(order, snapshot, available) -> (name, params)`；若有 `attach(pipeline)`，`build_sim_pipeline` 会调用它（订阅 `order_done` 读取 TCA 回填奖励）。 |
+| 组合构造器需要历史 | 自研组合构造器估协方差需要 `fit(panel, as_of)`；`build_sim_pipeline` 在 `kinds["portfolio"]` 非 `reference` 时自动调用一次；长期运行应在每次 `run_cycle` 前 `pipe.portfolio.fit(panel, as_of)`。 |
+| 路由叠加层 | `make_router("autoalgo.*", venues, base=None)`：`base` 缺省为 `make_router("auto", venues)`（latency_routing 适配器）；叠加层只改吃单份额 / 退化场所，`on_event` 先透传给底层。 |
+| 可解释性文档 | 每个生成算法附 `generated/<algo_id>/<algo_id>.md`（概述 / 协议层 / 假设 / 组件来源 / 流程与公式 / 参数 / 评估 vs 基线 / 风险 / 接入方式 / 复现与血缘），`evaluation.json` 给出通过与否；`passed=false` 的算法默认不应上线。 |
+| 评估基线 | 因子层对比 `reference.ReversalVolumeAlpha`；组合层在同一信号（默认受控 IC 合成信号，多面板平均）下对比 `reference.LongShortConstructor`；执行层对比挂单库 `almgren_chriss` / `twap`；选择器对比 `reference.choose_strategy`；路由层对比底层 latency_routing。模拟器评估均为多种子成对比较。 |
+| 入口 | `python -m autoalgo generate --budget quick|standard|full --proposer random|evolution|claude|mock`；`autoalgo.registry.make(kind)`；`autoalgo.registry_entries()` 被 `registry.plugin_registry()` 合并展示。 |
+| 模型策略 | 参数 / 设计提议阶段用 `claude-fable-5-1` + `output_config.effort="max"`（`--proposer claude`，需 `anthropic` 与 API 凭据；不可用时退回随机并在血缘中记录）；评估与文档生成为确定性代码。 |

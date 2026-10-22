@@ -1,0 +1,44 @@
+{
+  "algo_id": "cross_operator_mined_alpha",
+  "protocol": "AlphaModel",
+  "metrics": {
+    "rank_ic": 0.022173136237409213,
+    "rank_icir": 2.678905058066954,
+    "ic_t": 2.257790115228274,
+    "ls_sharpe": 3.3239147808169744,
+    "turnover": 0.34520668974840074,
+    "coverage": 1.0,
+    "n_periods": 179.0
+  },
+  "baselines": {
+    "reference.ReversalVolumeAlpha": {
+      "rank_ic": 0.03408426611364733,
+      "rank_icir": 4.085414831085055,
+      "ic_t": 3.4432012416620292,
+      "ls_sharpe": 3.385839987488537,
+      "turnover": 0.5256588128412698,
+      "coverage": 1.0,
+      "n_periods": 179.0
+    }
+  },
+  "settings": {
+    "train_ratio": 0.7,
+    "n_train": 420,
+    "n_oos": 179,
+    "stride": 1,
+    "horizon": 1,
+    "n_assets": 60,
+    "budget": "standard",
+    "seed": 0
+  },
+  "objective": "rank_ic",
+  "higher_is_better": true,
+  "passed": true,
+  "verdict": "样本外 RankIC=0.0222（t=2.26，显著），不及基线 0.0341；换手 0.345。",
+  "notes": [
+    "通过条件：样本外 RankIC > 0 且 t ≥ 2.0；'优于基线' 不是通过的必要条件（算法假设不同，覆盖的信息也不同）。",
+    "提示：合成面板只植入了反转与量价背离两类信号，参考基线恰好直接使用它们，因此在合成数据上难以被超越；请在真实面板上复核。"
+  ],
+  "wall_s": 8.784146547317505,
+  "created_at": "2026-10-22T11:36:53+00:00"
+}

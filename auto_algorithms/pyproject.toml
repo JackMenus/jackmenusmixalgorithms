@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autoalgo"
+version = "0.1.0"
+description = "自主生成算法库：在 factormine / order_placement / latency_routing / crossquant / quantstack 之上拼装新算法，自动评估并生成中文可解释性文档"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "量化算法交易项目" }]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.40"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["autoalgo*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
