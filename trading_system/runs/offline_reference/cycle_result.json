@@ -1,0 +1,242 @@
+{
+ "data_quality": {
+  "ok": true,
+  "issues": [],
+  "actions": []
+ },
+ "cycle": {
+  "as_of": "1645747200000000",
+  "n_signals": 40,
+  "n_targets": 10,
+  "n_orders": 10,
+  "n_rejected": 0,
+  "plans": {
+   "O000001": "twap",
+   "O000002": "twap",
+   "O000003": "almgren_chriss",
+   "O000004": "twap",
+   "O000005": "twap",
+   "O000006": "twap",
+   "O000007": "twap",
+   "O000008": "twap",
+   "O000009": "twap",
+   "O000010": "twap"
+  },
+  "nav_start": 5000000.0,
+  "nav_end": 5002257.25,
+  "gross_exposure": 3987386.8,
+  "net_exposure": 10725.82,
+  "tca": {
+   "n_orders": 10,
+   "filled_notional": 3992501.92,
+   "weighted_is_bps": 21.401,
+   "avg_fill_ratio": 1.0,
+   "total_fees": 120.54,
+   "maker_ratio": 0.1097,
+   "is_bps_by_strategy": {
+    "twap": 24.51,
+    "almgren_chriss": -5.886
+   },
+   "venue_avg_slippage_bps": {
+    "NYSE": 24.757,
+    "NASDAQ": 22.38,
+    "IEX": 19.174,
+    "ARCA": 19.426
+   },
+   "anomalies": [
+    {
+     "order_id": "O000001",
+     "symbol": "A0002",
+     "is_bps": 26.92,
+     "fill_ratio": 1.0
+    },
+    {
+     "order_id": "O000007",
+     "symbol": "A0005",
+     "is_bps": 96.26,
+     "fill_ratio": 1.0
+    },
+    {
+     "order_id": "O000009",
+     "symbol": "A0018",
+     "is_bps": 33.01,
+     "fill_ratio": 1.0
+    },
+    {
+     "order_id": "O000010",
+     "symbol": "A0000",
+     "is_bps": 33.89,
+     "fill_ratio": 1.0
+    }
+   ]
+  },
+  "venue_stats": [
+   {
+    "venue": "NYSE",
+    "fills": 123,
+    "rejects": 4,
+    "fill_ratio": 0.9811524350766132,
+    "avg_slippage_bps": 2.2899061131372385,
+    "latency_p50_us": 357.48796509110736,
+    "latency_p99_us": 1237.9259680849734,
+    "maker_ratio": 0.0
+   },
+   {
+    "venue": "NASDAQ",
+    "fills": 627,
+    "rejects": 1,
+    "fill_ratio": 0.5200652045050386,
+    "avg_slippage_bps": -0.5906042038424892,
+    "latency_p50_us": 324.08424115459394,
+    "latency_p99_us": 2310.2978722113294,
+    "maker_ratio": 0.6507095229953839
+   },
+   {
+    "venue": "ARCA",
+    "fills": 182,
+    "rejects": 6,
+    "fill_ratio": 0.953318833574996,
+    "avg_slippage_bps": 2.261881448731809,
+    "latency_p50_us": 456.18254073322686,
+    "latency_p99_us": 1589.0288272482476,
+    "maker_ratio": 0.0
+   },
+   {
+    "venue": "IEX",
+    "fills": 199,
+    "rejects": 1,
+    "fill_ratio": 0.9952751105014479,
+    "avg_slippage_bps": 2.260884292491651,
+    "latency_p50_us": 855.6596760400613,
+    "latency_p99_us": 1289.5256125277724,
+    "maker_ratio": 0.0
+   }
+  ],
+  "incidents": [],
+  "event_counts": {
+   "alpha_fit": 1,
+   "signal_batch": 1,
+   "target": 10,
+   "order_resized": 6,
+   "order": 10,
+   "agent_decision": 1,
+   "execution_plan": 10,
+   "route": 364,
+   "venue_ack": 82,
+   "venue_fill": 1131,
+   "slice_expired": 53,
+   "venue_cancel": 55,
+   "route_partial": 70,
+   "venue_reject": 12,
+   "order_done": 10
+  },
+  "duration_s": 1638.0
+ },
+ "plans": {
+  "O000001": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000002": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000003": {
+   "strategy": "almgren_chriss",
+   "params": {
+    "risk_aversion": 1e-05
+   },
+   "rationale": "母单较大或 alpha 衰减快：最优轨迹前置执行"
+  },
+  "O000004": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000005": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000006": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000007": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000008": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000009": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  },
+  "O000010": {
+   "strategy": "twap",
+   "params": {},
+   "rationale": "常规：等时间切片，落后时追赶"
+  }
+ },
+ "review": {
+  "review": {
+   "summary": "10 张母单，加权实施缺口 21.4bps，平均成交率 100.0%，maker 占比 11%。",
+   "anomalies": [
+    "O000001 A0002: IS=26.92bps fill=1.0",
+    "O000007 A0005: IS=96.26bps fill=1.0",
+    "O000009 A0018: IS=33.01bps fill=1.0",
+    "O000010 A0000: IS=33.89bps fill=1.0"
+   ],
+   "param_changes": [],
+   "strategy_feedback": {
+    "twap": "表现正常",
+    "almgren_chriss": "表现正常"
+   },
+   "venue_feedback": {},
+   "escalate": false,
+   "escalation_reason": "",
+   "confidence": 0.6
+  },
+  "applied_param_changes": []
+ },
+ "report": {
+  "headline": "当日 PnL 2,257，10 张母单，实施缺口 21.4bps",
+  "performance": "净值 5000000.0 -> 5002257.25；总敞口 3987386.8，净敞口 10725.82",
+  "execution": "策略分布 {'O000001': 'twap', 'O000002': 'twap', 'O000003': 'almgren_chriss', 'O000004': 'twap', 'O000005': 'twap', 'O000006': 'twap', 'O000007': 'twap', 'O000008': 'twap', 'O000009': 'twap', 'O000010': 'twap'}；成交率 1.0；maker 占比 0.1097",
+  "routing": "场所统计 [('NYSE', 0.98, 357), ('NASDAQ', 0.52, 324), ('ARCA', 0.95, 456), ('IEX', 1.0, 856)]",
+  "risks": "事故 0 起；被拒母单 0",
+  "next_steps": [
+   "复核异常母单",
+   "更新场所延迟先验"
+  ]
+ },
+ "decisions": [
+  {
+   "task": "execution_plan",
+   "spec": "scripted(claude-opus-5-5)@medium",
+   "ok": true,
+   "attempts": 1
+  },
+  {
+   "task": "post_trade_review",
+   "spec": "scripted(claude-opus-5-5)@medium",
+   "ok": true,
+   "attempts": 1
+  },
+  {
+   "task": "daily_report",
+   "spec": "scripted(claude-opus-5-5)@low",
+   "ok": true,
+   "attempts": 1
+  }
+ ],
+ "wall_s": 1.4
+}
