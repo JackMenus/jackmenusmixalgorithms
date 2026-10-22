@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crossquant"
+version = "0.1.0"
+description = "跨学科量化算法库：物理 / 数学 / 控制论中可借鉴于量化交易的算法（中文文档）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "量化算法交易项目" }]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+examples = ["pandas>=2.0", "matplotlib>=3.7"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["crossquant*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
